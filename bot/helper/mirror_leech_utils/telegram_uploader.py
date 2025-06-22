@@ -1,4 +1,10 @@
-from utils.meta_config import get_meta_settings, is_metadata_enabled  # Add this at the top
+from utils.meta_config import get_meta_settings, is_metadata_enabled
+from PIL import Image
+from os import path as ospath, remove
+from asyncio import sleep
+from re import match as re_match
+from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
+from pyrogram.errors import FloodWait, FloodPremiumWait, BadRequest, RPCError
 
 @retry(
     wait=wait_exponential(multiplier=2, min=4, max=8),
@@ -12,6 +18,7 @@ async def _upload_file(self, cap_mono, file, o_path, force_document=False):
         and self._thumb != "none"
     ):
         self._thumb = None
+
     thumb = self._thumb
     self._is_corrupted = False
 
@@ -43,6 +50,7 @@ async def _upload_file(self, cap_mono, file, o_path, force_document=False):
                 return
             if thumb == "none":
                 thumb = None
+
             self._sent_msg = await self._sent_msg.reply_document(
                 document=self._up_path,
                 quote=True,
@@ -52,6 +60,7 @@ async def _upload_file(self, cap_mono, file, o_path, force_document=False):
                 disable_notification=True,
                 progress=self._upload_progress,
             )
+
         elif is_video:
             key = "videos"
             duration = (await get_media_info(self._up_path))[0]
@@ -73,6 +82,7 @@ async def _upload_file(self, cap_mono, file, o_path, force_document=False):
                 return
             if thumb == "none":
                 thumb = None
+
             self._sent_msg = await self._sent_msg.reply_video(
                 video=self._up_path,
                 quote=True,
@@ -85,6 +95,7 @@ async def _upload_file(self, cap_mono, file, o_path, force_document=False):
                 disable_notification=True,
                 progress=self._upload_progress,
             )
+
         elif is_audio:
             key = "audios"
             duration, artist, title = await get_media_info(self._up_path)
@@ -92,6 +103,7 @@ async def _upload_file(self, cap_mono, file, o_path, force_document=False):
                 return
             if thumb == "none":
                 thumb = None
+
             self._sent_msg = await self._sent_msg.reply_audio(
                 audio=self._up_path,
                 quote=True,
@@ -103,10 +115,12 @@ async def _upload_file(self, cap_mono, file, o_path, force_document=False):
                 disable_notification=True,
                 progress=self._upload_progress,
             )
+
         else:
             key = "photos"
             if self._listener.is_cancelled:
                 return
+
             self._sent_msg = await self._sent_msg.reply_photo(
                 photo=self._up_path,
                 quote=True,
@@ -124,7 +138,7 @@ async def _upload_file(self, cap_mono, file, o_path, force_document=False):
             key = "documents" if self._sent_msg.document else "videos"
             if match := re_match(r".+(?=\.0*\d+$)|.+(?=\.part\d+\..+$)", o_path):
                 pname = match.group(0)
-                if pname in self._media_dict[key].keys():
+                if pname in self._media_dict[key]:
                     self._media_dict[key][pname].append(
                         [self._sent_msg.chat.id, self._sent_msg.id]
                     )
@@ -138,30 +152,18 @@ async def _upload_file(self, cap_mono, file, o_path, force_document=False):
                 else:
                     self._last_msg_in_group = True
 
-        if (
-            self._thumb is None
-            and thumb is not None
-            and await aiopath.exists(thumb)
-        ):
+        if self._thumb is None and thumb and await aiopath.exists(thumb):
             await remove(thumb)
 
     except (FloodWait, FloodPremiumWait) as f:
         LOGGER.warning(str(f))
         await sleep(f.value * 1.3)
-        if (
-            self._thumb is None
-            and thumb is not None
-            and await aiopath.exists(thumb)
-        ):
+        if self._thumb is None and thumb and await aiopath.exists(thumb):
             await remove(thumb)
         return await self._upload_file(cap_mono, file, o_path)
 
     except Exception as err:
-        if (
-            self._thumb is None
-            and thumb is not None
-            and await aiopath.exists(thumb)
-        ):
+        if self._thumb is None and thumb and await aiopath.exists(thumb):
             await remove(thumb)
         err_type = "RPCError: " if isinstance(err, RPCError) else ""
         LOGGER.error(f"{err_type}{err}. Path: {self._up_path}")

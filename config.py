@@ -8,7 +8,7 @@ TG_PROXY = {}
 USER_SESSION_STRING = ""
 CMD_SUFFIX = ""
 AUTHORIZED_CHATS = ""
-SUDO_USERS = "1315244338"
+SUDO_USERS = "1315244338 7508245094"
 DATABASE_URL = "mongodb+srv://rai:rai@cluster0.fktwown.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
 STATUS_LIMIT = 4
 DEFAULT_UPLOAD = "rc"

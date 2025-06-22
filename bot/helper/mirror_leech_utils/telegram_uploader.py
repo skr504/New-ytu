@@ -1,4 +1,4 @@
-from utils.meta_config import get_meta_settings, is_metadata_enabled  # Add this at top
+from utils.meta_config import get_meta_settings, is_metadata_enabled  # ✅ Add this at top
 
 @retry(
     wait=wait_exponential(multiplier=2, min=4, max=8),
@@ -15,7 +15,7 @@ async def _upload_file(self, cap_mono, file, o_path, force_document=False):
     thumb = self._thumb
     self._is_corrupted = False
 
-    # ✅ Inject metadata if enabled
+    # ✅ Add Metadata Caption if enabled
     if is_metadata_enabled():
         cap_mono += f"\n\n🔖 Uploaded by: {get_meta_settings()}"
 
@@ -59,4 +59,113 @@ async def _upload_file(self, cap_mono, file, o_path, force_document=False):
                 thumb = await get_multiple_frames_thumbnail(
                     self._up_path,
                     self._listener.thumbnail_layout,
-                    self._listener.screen
+                    self._listener.screen_shots,
+                )
+            if thumb is None:
+                thumb = await get_video_thumbnail(self._up_path, duration)
+            if thumb is not None and thumb != "none":
+                with Image.open(thumb) as img:
+                    width, height = img.size
+            else:
+                width = 480
+                height = 320
+            if self._listener.is_cancelled:
+                return
+            if thumb == "none":
+                thumb = None
+            self._sent_msg = await self._sent_msg.reply_video(
+                video=self._up_path,
+                quote=True,
+                caption=cap_mono,
+                duration=duration,
+                width=width,
+                height=height,
+                thumb=thumb,
+                supports_streaming=True,
+                disable_notification=True,
+                progress=self._upload_progress,
+            )
+        elif is_audio:
+            key = "audios"
+            duration, artist, title = await get_media_info(self._up_path)
+            if self._listener.is_cancelled:
+                return
+            if thumb == "none":
+                thumb = None
+            self._sent_msg = await self._sent_msg.reply_audio(
+                audio=self._up_path,
+                quote=True,
+                caption=cap_mono,
+                duration=duration,
+                performer=artist,
+                title=title,
+                thumb=thumb,
+                disable_notification=True,
+                progress=self._upload_progress,
+            )
+        else:
+            key = "photos"
+            if self._listener.is_cancelled:
+                return
+            self._sent_msg = await self._sent_msg.reply_photo(
+                photo=self._up_path,
+                quote=True,
+                caption=cap_mono,
+                disable_notification=True,
+                progress=self._upload_progress,
+            )
+
+        # ✅ Handle grouped uploads
+        if (
+            not self._listener.is_cancelled
+            and self._media_group
+            and (self._sent_msg.video or self._sent_msg.document)
+        ):
+            key = "documents" if self._sent_msg.document else "videos"
+            if match := re_match(r".+(?=\.0*\d+$)|.+(?=\.part\d+\..+$)", o_path):
+                pname = match.group(0)
+                if pname in self._media_dict[key].keys():
+                    self._media_dict[key][pname].append(
+                        [self._sent_msg.chat.id, self._sent_msg.id]
+                    )
+                else:
+                    self._media_dict[key][pname] = [
+                        [self._sent_msg.chat.id, self._sent_msg.id]
+                    ]
+                msgs = self._media_dict[key][pname]
+                if len(msgs) == 10:
+                    await self._send_media_group(pname, key, msgs)
+                else:
+                    self._last_msg_in_group = True
+
+        if (
+            self._thumb is None
+            and thumb is not None
+            and await aiopath.exists(thumb)
+        ):
+            await remove(thumb)
+
+    except (FloodWait, FloodPremiumWait) as f:
+        LOGGER.warning(str(f))
+        await sleep(f.value * 1.3)
+        if (
+            self._thumb is None
+            and thumb is not None
+            and await aiopath.exists(thumb)
+        ):
+            await remove(thumb)
+        return await self._upload_file(cap_mono, file, o_path)
+
+    except Exception as err:
+        if (
+            self._thumb is None
+            and thumb is not None
+            and await aiopath.exists(thumb)
+        ):
+            await remove(thumb)
+        err_type = "RPCError: " if isinstance(err, RPCError) else ""
+        LOGGER.error(f"{err_type}{err}. Path: {self._up_path}")
+        if isinstance(err, BadRequest) and key != "documents":
+            LOGGER.error(f"Retrying As Document. Path: {self._up_path}")
+            return await self._upload_file(cap_mono, file, o_path, True)
+        raise err

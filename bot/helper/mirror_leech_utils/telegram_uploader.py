@@ -1,4 +1,4 @@
-from utils.meta_config import get_meta_settings, is_metadata_enabled  # ✅ Add this at top
+from utils.meta_config import get_meta_settings, is_metadata_enabled  # Add this at the top
 
 @retry(
     wait=wait_exponential(multiplier=2, min=4, max=8),
@@ -15,7 +15,7 @@ async def _upload_file(self, cap_mono, file, o_path, force_document=False):
     thumb = self._thumb
     self._is_corrupted = False
 
-    # ✅ Add Metadata Caption if enabled
+    # ✅ Add metadata to caption if enabled
     if is_metadata_enabled():
         cap_mono += f"\n\n🔖 Uploaded by: {get_meta_settings()}"
 
@@ -115,7 +115,7 @@ async def _upload_file(self, cap_mono, file, o_path, force_document=False):
                 progress=self._upload_progress,
             )
 
-        # ✅ Handle grouped uploads
+        # ✅ Handle media group
         if (
             not self._listener.is_cancelled
             and self._media_group

@@ -1,4 +1,4 @@
-from utils.meta_config import get_meta_settings, is_metadata_enabled
+from bot.utils.meta_config import get_meta_settings, is_metadata_enabled
 from PIL import Image
 from os import path as ospath, remove
 from asyncio import sleep
@@ -144,33 +144,4 @@ async def _upload_file(self, cap_mono, file, o_path, force_document=False):
                 if pname in self._media_dict[key]:
                     self._media_dict[key][pname].append(
                         [self._sent_msg.chat.id, self._sent_msg.id]
-                    )
-                else:
-                    self._media_dict[key][pname] = [
-                        [self._sent_msg.chat.id, self._sent_msg.id]
-                    ]
-                msgs = self._media_dict[key][pname]
-                if len(msgs) == 10:
-                    await self._send_media_group(pname, key, msgs)
-                else:
-                    self._last_msg_in_group = True
-
-        if self._thumb is None and thumb and await aiopath.exists(thumb):
-            await remove(thumb)
-
-    except (FloodWait, FloodPremiumWait) as f:
-        LOGGER.warning(str(f))
-        await sleep(f.value * 1.3)
-        if self._thumb is None and thumb and await aiopath.exists(thumb):
-            await remove(thumb)
-        return await self._upload_file(cap_mono, file, o_path)
-
-    except Exception as err:
-        if self._thumb is None and thumb and await aiopath.exists(thumb):
-            await remove(thumb)
-        err_type = "RPCError: " if isinstance(err, RPCError) else ""
-        LOGGER.error(f"{err_type}{err}. Path: {self._up_path}")
-        if isinstance(err, BadRequest) and key != "documents":
-            LOGGER.error(f"Retrying As Document. Path: {self._up_path}")
-            return await self._upload_file(cap_mono, file, o_path, True)
-        raise err
+                )

@@ -1,10 +1,11 @@
-from bot.utils.meta_config import get_meta_settings, is_metadata_enabled
+from bot.utils.meta_config import get_meta_settings
 from PIL import Image
 from os import path as ospath, remove
 from asyncio import sleep
 from re import match as re_match
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
 from pyrogram.errors import FloodWait, FloodPremiumWait, BadRequest, RPCError
+import aiofiles.os as aiopath  # ensure this is available
 
 @retry(
     wait=wait_exponential(multiplier=2, min=4, max=8),
@@ -23,9 +24,8 @@ async def _upload_file(self, cap_mono, file, o_path, force_document=False):
     self._is_corrupted = False
 
     # ✅ Add metadata to caption if enabled
-    from_user_id = self._listener.user_id if hasattr(self._listener, "user_id") else None
+    from_user_id = getattr(self._listener, "user_id", None)
     meta_enabled, meta_text = get_meta_settings(from_user_id) if from_user_id else (False, None)
-
     if meta_enabled and meta_text:
         cap_mono += f"\n\n{meta_text}"
 
@@ -81,6 +81,7 @@ async def _upload_file(self, cap_mono, file, o_path, force_document=False):
             else:
                 width = 480
                 height = 320
+
             if self._listener.is_cancelled:
                 return
             if thumb == "none":
@@ -132,7 +133,7 @@ async def _upload_file(self, cap_mono, file, o_path, force_document=False):
                 progress=self._upload_progress,
             )
 
-        # ✅ Handle media group
+        # ✅ Handle media group if enabled
         if (
             not self._listener.is_cancelled
             and self._media_group
@@ -144,4 +145,29 @@ async def _upload_file(self, cap_mono, file, o_path, force_document=False):
                 if pname in self._media_dict[key]:
                     self._media_dict[key][pname].append(
                         [self._sent_msg.chat.id, self._sent_msg.id]
-                )
+                    )
+                else:
+                    self._media_dict[key][pname] = [
+                        [self._sent_msg.chat.id, self._sent_msg.id]
+                    ]
+                msgs = self._media_dict[key][pname]
+                if len(msgs) == 10:
+                    await self._send_media_group(pname, key, msgs)
+                else:
+                    self._last_msg_in_group = True
+
+        # 🧹 Cleanup
+        if self._thumb is None and thumb and await aiopath.exists(thumb):
+            await aiopath.remove(thumb)
+
+    except (FloodWait, FloodPremiumWait) as f:
+        LOGGER.warning(str(f))
+        await sleep(f.value * 1.3)
+        if self._thumb is None and thumb and await aiopath.exists(thumb):
+            await aiopath.remove(thumb)
+        return await self._upload_file(cap_mono, file, o_path)
+
+    except Exception as err:
+        if self._thumb is None and thumb and await aiopath.exists(thumb):
+            await aiopath.remove(thumb)
+        err

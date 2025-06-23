@@ -23,8 +23,11 @@ async def _upload_file(self, cap_mono, file, o_path, force_document=False):
     self._is_corrupted = False
 
     # ✅ Add metadata to caption if enabled
-    if is_metadata_enabled():
-        cap_mono += f"\n\n🔖 Uploaded by: {get_meta_settings()}"
+    from_user_id = self._listener.user_id if hasattr(self._listener, "user_id") else None
+    meta_enabled, meta_text = get_meta_settings(from_user_id) if from_user_id else (False, None)
+
+    if meta_enabled and meta_text:
+        cap_mono += f"\n\n{meta_text}"
 
     try:
         is_video, is_audio, is_image = await get_document_type(self._up_path)
